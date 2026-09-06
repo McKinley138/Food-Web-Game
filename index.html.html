@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoWeb: Energy Flow Challenge</title>
+    <style>
+        :root {
+            --bg-color: #f0f7f4;
+            --primary-green: #2d6a4f;
+            --accent-gold: #ffca3a;
+            --danger: #ff595e;
+            --text-dark: #1b4332;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            background: var(--primary-green);
+            color: white;
+            width: 100%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        #game-container {
+            position: relative;
+            width: 900px;
+            height: 600px;
+            margin: 30px auto;
+            background: white;
+            border-radius: 15px;
+            border: 4px solid var(--primary-green);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: none; 
+        }
+
+        .organism {
+            position: absolute;
+            width: 110px;
+            height: 90px;
+            background: white;
+            border: 3px solid var(--primary-green);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+            z-index: 2;
+            text-align: center;
+            padding: 5px;
+        }
+
+        .organism:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .organism.selected { background: var(--accent-gold); border-color: #d4a017; }
+        .emoji { font-size: 30px; display: block; }
+        .name { font-weight: bold; font-size: 14px; }
+        .trophic { font-size: 10px; color: #666; text-transform: uppercase; }
+
+        #connection-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #ui-panel {
+            text-align: center;
+            max-width: 800px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .stats-container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .error-text { color: var(--danger); }
+        .instructions {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 5px solid var(--primary-green);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 100px rgba(0,0,0,0.5);
+            z-index: 100;
+            text-align: center;
+            width: 400px;
+        }
+
+        #name-modal { display: block; border: 5px solid var(--primary-green); }
+        #win-message { border: 5px solid var(--accent-gold); }
+        #fail-message { border: 5px solid var(--danger); }
+
+        .credit-instruction {
+            font-style: italic;
+            color: #555;
+            margin: 20px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border: 1px dashed #ccc;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            font-size: 18px;
+            width: 80%;
+            margin-bottom: 20px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        button {
+            background: var(--primary-green);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #certified-name {
+            font-size: 24px;
+            color: var(--primary-green);
+            font-weight: bold;
+            margin: 10px 0;
+            text-decoration: underline;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 16px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🌿 EcoWeb: Energy Flow Challenge</h1>
+    <p>Map the transfer of energy through the ecosystem!</p>
+</header>
+
+<div id="toast">Path Found!</div>
+
+<div id="name-modal" class="modal">
+    <h2>Welcome, Biologist!</h2>
+    <p>Please enter your full name to begin the simulation:</p>
+    <form id="start-form" onsubmit="handleFormSubmit(event)">
+        <input type="text" id="user-name-input" placeholder="Enter your name here..." required>
+        <br>
+        <button type="submit">Start Simulation</button>
+    </form>
+</div>
+
+<div id="ui-panel">
+    <div class="stats-container">
+        <div>Energy Paths Found: <span id="score">0</span> / <span id="total">0</span></div>
+        <div class="error-text">Mistakes: <span id="error-count">0</span> / 3</div>
+    </div>
+    <div class="instructions">
+        <strong>Biological Rule:</strong> Arrows represent <b>Energy Flow</b>. <br>
+        Click the <b>Prey</b> (energy source) first, then the <b>Predator</b> (energy receiver).
+    </div>
+</div>
+
+<div id="game-container">
+    <svg id="connection-layer"></svg>
+</div>
+
+<div id="win-message" class="modal">
+    <h2>🎉 Ecosystem Balanced!</h2>
+    <p>The energy flow is correctly mapped.</p>
+    <div id="certified-name"></div>
+    <p class="credit-instruction">Take a screenshot of this page and upload it to Google Classroom to earn credit.</p>
+    <button onclick="location.reload()">Restart Simulation</button>
+</div>
+
+<div id="fail-message" class="modal">
+    <h2 style="color: var(--danger);">❌ Simulation Failed</h2>
+    <p>Too many errors in the energy chain. The ecosystem has collapsed!</p>
+    <p><strong>Please repeat the game to earn your credit.</strong></p>
+    <button onclick="location.reload()">Try Again</button>
+</div>
+
+<script>
+    let studentName = "";
+    const organisms = [
+        { id: 'grass', name: 'Grass', emoji: '🌿', trophic: 'Producer', x: 300, y: 480 },
+        { id: 'berries', name: 'Berries', emoji: '🍓', trophic: 'Producer', x: 600, y: 480 },
+        { id: 'grasshopper', name: 'Grasshopper', emoji: '🦗', trophic: 'Primary Cons.', x: 100, y: 350 },
+        { id: 'rabbit', name: 'Rabbit', emoji: '🐇', trophic: 'Primary Cons.', x: 450, y: 350 },
+        { id: 'mouse', name: 'Mouse', emoji: '🐭', trophic: 'Primary Cons.', x: 720, y: 350 },
+        { id: 'frog', name: 'Frog', emoji: '🐸', trophic: 'Secondary Cons.', x: 150, y: 200 },
+        { id: 'snake', name: 'Snake', emoji: '🐍', trophic: 'Secondary Cons.', x: 680, y: 200 },
+        { id: 'hawk', name: 'Hawk', emoji: '🦅', trophic: 'Tertiary Cons.', x: 450, y: 20 },
+    ];
+
+    const correctLinks = [
+        ['grass', 'grasshopper'], ['grass', 'rabbit'], ['grass', 'mouse'],
+        ['berries', 'rabbit'], ['berries', 'mouse'], ['grasshopper', 'frog'],
+        ['frog', 'snake'], ['rabbit', 'snake'], ['mouse', 'snake'],
+        ['snake', 'hawk'], ['frog', 'hawk'],
+    ];
+
+    let errors = 0;
+    let selectedId = null;
+    const foundLinks = new Set();
+    
+    const gameContainer = document.getElementById('game-container');
+    const svgLayer = document.getElementById('connection-layer');
+    const scoreEl = document.getElementById('score');
+    const errorEl = document.getElementById('error-count');
+    const totalEl = document.getElementById('total');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg) {
+        toast.innerText = msg;
+        toast.style.opacity = 1;
+        setTimeout(() => { toast.style.opacity = 0; }, 1500);
+    }
+
+    function handleFormSubmit(event) {
+        event.preventDefault();
+        startGame();
+    }
+
+    function startGame() {
+        const input = document.getElementById('user-name-input');
+        if (input.value.trim() === "") {
+            alert("Please enter your name to proceed!");
+            return;
+        }
+        studentName = input.value.trim();
+        document.getElementById('name-modal').style.display = 'none';
+        document.getElementById('ui-panel').style.display = 'block';
+        document.getElementById('game-container').style.display = 'block';
+        init();
+    }
+
+    function init() {
+        totalEl.innerText = correctLinks.length;
+        organisms.forEach(org => {
+            const div = document.createElement('div');
+            div.className = 'organism';
+            div.id = org.id;
+            div.style.left = org.x + 'px';
+            div.style.top = org.y + 'px';
+            div.innerHTML = `<span class="emoji">${org.emoji}</span><span class="name">${org.name}</span><span class="trophic">${org.trophic}</span>`;
+            div.onclick = () => handleSelect(org.id);
+            gameContainer.appendChild(div);
+        });
+    }
+
+    function handleSelect(id) {
+        if (selectedId === null) {
+            selectedId = id;
+            document.getElementById(id).classList.add('selected');
+        } else if (selectedId === id) {
+            document.getElementById(id).classList.remove('selected');
+            selectedId = null;
+        } else {
+            checkConnection(selectedId, id);
+            document.getElementById(selectedId).classList.remove('selected');
+            selectedId = null;
+        }
+    }
+
+    function checkConnection(preyId, predatorId) {
+        const linkKey = `${preyId}-${predatorId}`;
+        const isCorrect = correctLinks.some(link => link[0] === preyId && link[1] === predatorId);
+
+        if (isCorrect) {
+            if (!foundLinks.has(linkKey)) {
+                foundLinks.add(linkKey);
+                drawLine(preyId, predatorId, '#2d6a4f', foundLinks.size);
+                showToast("Path Found!");
+            } else {
+                showToast("Already Found!");
+            }
+            
+            scoreEl.innerText = foundLinks.size;
+            if (foundLinks.size === correctLinks.length) {
+                document.getElementById('certified-name').innerText = "Certified by: " + studentName;
+                document.getElementById('win-message').style.display = 'block';
+            }
+        } else {
+            errors++;
+            errorEl.innerText = errors;
+            if (errors >= 3) {
+                document.getElementById('fail-message').style.display = 'block';
+            } else {
+                drawLine(preyId, predatorId, '#ff595e', null);
+                showToast("Incorrect Flow!");
+            }
+        }
+    }
+
+    function drawLine(startId, endId, color, pathNum = null) {
+        const startEl = document.getElementById(startId);
+        const endEl = document.getElementById(endId);
+
+        const x1 = startEl.offsetLeft + 55;
+        const y1 = startEl.offsetTop + 45;
+        const x2 = endEl.offsetLeft + 55;
+        const y2 = endEl.offsetTop + 45;
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', '4');
+        line.setAttribute('marker-end', 'url(#arrowhead)');
+
+        if (!pathNum) {
+            line.setAttribute('stroke-dasharray', '5,5');
+            svgLayer.appendChild(line);
+            setTimeout(() => { line.remove(); }, 800);
+        } else {
+            svgLayer.appendChild(line);
+            
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', midX + 10);
+            text.setAttribute('y', midY - 10);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'central');
+            text.setAttribute('fill', 'white');
+            text.setAttribute('font-weight', 'bold');
+            text.setAttribute('font-size', '14px');
+            text.setAttribute('style', 'paint-order: stroke; stroke: #2d6a4f; stroke-width: 3px;');
+            text.textContent = pathNum;
+            
+            svgLayer.appendChild(text);
+        }
+
+        if (!document.getElementById('arrowhead')) {
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            defs.innerHTML = `<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${color}" /></marker>`;
+            svgLayer.appendChild(defs);
+        }
+    }
+</script>
+</body>
+</html>
